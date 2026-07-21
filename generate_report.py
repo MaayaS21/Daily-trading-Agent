@@ -1,6 +1,10 @@
 import os
 import re
+import smtplib
 import requests
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
 from google import genai
 from google.genai import types
 
@@ -8,6 +12,9 @@ from google.genai import types
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+SENDER_EMAIL = os.getenv("SENDER_EMAIL")
+SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
+RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL")  # Accepts single email OR comma-separated emails
 
 # Session Type passed from GitHub Actions or defaults to PREMARKET
 SESSION_TYPE = os.getenv("SESSION_TYPE", "PREMARKET")
@@ -107,8 +114,8 @@ def generate_pdf():
 
 def send_telegram_pdf():
     pdf_filename = "daily_trading_blueprint.pdf"
-    if not os.path.exists(pdf_filename):
-        print("PDF file not found. Skipping Telegram delivery.")
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Telegram tokens missing. Skipping Telegram delivery.")
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
@@ -132,6 +139,48 @@ def send_telegram_pdf():
     except Exception as e:
         print(f"Error sending file via Telegram API: {e}")
 
+def send_email_pdf():
+    pdf_filename = "daily_trading_blueprint.pdf"
+    if not SENDER_EMAIL or not SENDER_PASSWORD or not RECIPIENT_EMAIL:
+        print("Email configuration missing. Skipping Email delivery.")
+        return
+
+    # Parse single or multiple comma-separated emails
+    recipients = [e.strip() for e in RECIPIENT_EMAIL.split(",") if e.strip()]
+
+    if not recipients:
+        print("No valid recipient emails found.")
+        return
+
+    print(f"Sending automated briefing email to {len(recipients)} recipient(s): {', '.join(recipients)}")
+    
+    # Setup MIME Message
+    msg = MIMEMultipart()
+    msg['From'] = SENDER_EMAIL
+    msg['To'] = ", ".join(recipients)
+    msg['Subject'] = current_session['title']
+
+    body = f"Hello,\n\nAttached is your automated trading briefing for the {SESSION_TYPE} session.\n\nIncluded:\n- Section 0: Live Financial News Wire Digest\n- Strategy-Filtered Stock, Crypto & Forex Setups\n- Granular Long/Short Entry, Target & Stop Loss Levels\n- 10-Year Backtest Analytics\n\nBest regards,\nYour Automated Trading Desk"
+    msg.attach(MIMEText(body, 'plain'))
+
+    # Attach PDF Document
+    with open(pdf_filename, "rb") as f:
+        attach = MIMEApplication(f.read(), _subtype="pdf")
+        attach.add_header('Content-Disposition', 'attachment', filename=pdf_filename)
+        msg.attach(attach)
+
+    # Send via Gmail SMTP Server
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.sendmail(SENDER_EMAIL, recipients, msg.as_string())
+        server.quit()
+        print(f"Email successfully delivered to all {len(recipients)} recipient(s)!")
+    except Exception as e:
+        print(f"Error sending email via SMTP: {e}")
+
 if __name__ == "__main__":
     if generate_pdf():
         send_telegram_pdf()
+        send_email_pdf()
