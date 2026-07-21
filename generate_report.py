@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import smtplib
 import requests
 from email.mime.multipart import MIMEMultipart
@@ -8,20 +9,24 @@ from email.mime.application import MIMEApplication
 from google import genai
 from google.genai import types
 
-# 1. Fetch Environment Secrets
+print("=== STARTING REPORT GENERATION SCRIPT ===")
+
+# 1. Environment Verification
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
-RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL")  # Accepts single email OR comma-separated emails
+RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL")
 
-# Session Type passed from GitHub Actions or defaults to PREMARKET
 SESSION_TYPE = os.getenv("SESSION_TYPE", "PREMARKET")
+
+if not GEMINI_API_KEY:
+    print("❌ CRITICAL ERROR: GEMINI_API_KEY environment variable is missing!")
+    sys.exit(1)
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-# 2. Session Context Configuration
 SESSION_MAP = {
     "PREMARKET": {
         "title": "🌅 8:00 AM IST Premarket Report & Indian Market Setup",
@@ -39,7 +44,6 @@ SESSION_MAP = {
 
 current_session = SESSION_MAP.get(SESSION_TYPE, SESSION_MAP["PREMARKET"])
 
-# 3. Master Prompt with Strict Formatting & Strategy Constraints
 PROMPT = f"""
 Act as a Lead Quantitative Strategist and Institutional Portfolio Manager. Generate a comprehensive 2-page Daily Multi-Asset Trading Blueprint & Level Execution Manual in PDF format based on today's live market conditions and top financial news headlines.
 
@@ -75,53 +79,54 @@ Search live market data today and dynamically select top-performing tickers base
 
 ### 📊 MANDATORY HTML/CSS LAYOUT RULES FOR WEASYPRINT (STRICT COMPLIANCE REQUIRED)
 Write a Python script using `weasyprint` and `HTML` to compile a PDF named 'daily_trading_blueprint.pdf'.
-To ensure perfect table alignment and prevent text wrapping bugs, you MUST enforce the following CSS:
-1. Page Setup: `@page {{ size: A4 portrait; margin: 10mm 12mm 12mm 12mm; background-color: #fcfbf9; }}`. Typography: `"Georgia", "Times New Roman", serif`. Font size: `7.2pt` to `8pt`.
-2. Tables Layout: Set `table-layout: fixed; width: 100%; border-collapse: collapse; margin-bottom: 6px;` on ALL `<table>` elements.
-3. Column Widths: Define explicit percentage widths on every `<th>` element (e.g., `<th style="width: 15%;">`).
-4. Cells Wrapping: Apply `word-wrap: break-word; overflow-wrap: break-word; vertical-align: top; padding: 3px 4px;` to ALL `<td>` elements to prevent horizontal overflow.
-5. Pagination Control: Set `page-break-inside: avoid;` on all tables, section boxes, and SVG graph containers.
-6. Design Elements: Include the 10-year backtest performance comparison table (Target CAGR 28.4%, Sharpe 1.45, Max DD -18.2%) vs S&P 500 TRI (~13.0%) and Nifty 50 TRI (~12.5%), along with an embedded vector/SVG equity curve chart ($3,000 to $36,512).
+To ensure perfect table alignment and prevent text wrapping bugs, enforce strict CSS:
+1. `@page {{ size: A4 portrait; margin: 10mm 12mm 12mm 12mm; background-color: #fcfbf9; }}`. Typography: `"Georgia", serif`. Font size: `7.2pt` to `8pt`.
+2. Set `table-layout: fixed; width: 100%; border-collapse: collapse; margin-bottom: 6px;` on ALL `<table>` elements.
+3. Define explicit percentage widths on every `<th>` element (e.g., `<th style="width: 15%;">`).
+4. Apply `word-wrap: break-word; overflow-wrap: break-word; vertical-align: top; padding: 3px 4px;` to ALL `<td>` elements.
+5. Set `page-break-inside: avoid;` on all tables, section boxes, and SVG graph containers.
+6. Include 10-year backtest metrics table (Target CAGR 28.4%, Sharpe 1.45, Max DD -18.2%) vs S&P 500 TRI (~13.0%) and Nifty 50 TRI (~12.5%), along with an embedded vector/SVG equity curve chart ($3,000 to $36,512).
 7. Every stock/crypto table must have a dedicated "Strategy & Selection Reason" column.
 
 Output ONLY executable Python code inside ```python ``` code blocks.
 """
 
 def generate_pdf():
-    print(f"Fetching live market data and generating blueprint for [{SESSION_TYPE}] session...")
+    print(f"📡 Requesting market search & PDF blueprint from Gemini [{SESSION_TYPE}]...")
     try:
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=PROMPT,
             config=types.GenerateContentConfig(
-                tools=[{"google_search": {}}] # Live Search Grounding Enabled
+                tools=[{"google_search": {}}]
             )
         )
 
         match = re.search(r'```python\s*(.*?)\s*```', response.text, re.DOTALL)
         if match:
             py_code = match.group(1)
-            print("Executing WeasyPrint script to render daily_trading_blueprint.pdf...")
+            print("⚙️ Executing rendered Python code via WeasyPrint...")
             exec(py_code, globals())
-            print("PDF generation complete!")
+            print("✅ PDF generated successfully: daily_trading_blueprint.pdf")
             return True
         else:
-            print("Error: Could not extract Python code block from response.")
+            print("❌ ERROR: Could not parse Python code block from Gemini output!")
+            print("Raw Gemini output snippet:", response.text[:300])
             return False
     except Exception as e:
-        print(f"Error calling Gemini API: {e}")
+        print(f"❌ Gemini API Call Failed: {e}")
         return False
 
-def send_telegram_pdf():
+def send_telegram():
     pdf_filename = "daily_trading_blueprint.pdf"
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Telegram tokens missing. Skipping Telegram delivery.")
+        print("⚠️ Telegram credentials missing. Skipping Telegram upload.")
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-    caption_text = f"📈 *{current_session['title']}*\n\nAttached is your automated trading briefing and execution manual for the *{SESSION_TYPE}* session."
+    caption_text = f"📈 *{current_session['title']}*\n\nAttached is your automated trading briefing for the *{SESSION_TYPE}* session."
 
-    print("Uploading PDF to Telegram...")
+    print("📱 Sending document to Telegram...")
     try:
         with open(pdf_filename, "rb") as pdf_file:
             files = {"document": (pdf_filename, pdf_file, "application/pdf")}
@@ -130,57 +135,55 @@ def send_telegram_pdf():
                 "caption": caption_text,
                 "parse_mode": "Markdown"
             }
-            response = requests.post(url, data=data, files=files)
-
-        if response.status_code == 200:
-            print("Successfully delivered report to Telegram!")
+            res = requests.post(url, data=data, files=files)
+        
+        if res.status_code == 200:
+            print("✅ Telegram delivery successful!")
         else:
-            print(f"Failed to send Telegram message: {response.text}")
+            print(f"❌ Telegram API returned error [{res.status_code}]: {res.text}")
     except Exception as e:
-        print(f"Error sending file via Telegram API: {e}")
+        print(f"❌ Exception during Telegram send: {e}")
 
-def send_email_pdf():
+def send_email():
     pdf_filename = "daily_trading_blueprint.pdf"
     if not SENDER_EMAIL or not SENDER_PASSWORD or not RECIPIENT_EMAIL:
-        print("Email configuration missing. Skipping Email delivery.")
+        print("⚠️ Email credentials missing. Skipping email delivery.")
         return
 
-    # Parse single or multiple comma-separated emails
     recipients = [e.strip() for e in RECIPIENT_EMAIL.split(",") if e.strip()]
-
     if not recipients:
-        print("No valid recipient emails found.")
+        print("⚠️ No valid recipient emails found.")
         return
 
-    print(f"Sending automated briefing email to {len(recipients)} recipient(s): {', '.join(recipients)}")
+    print(f"📧 Sending email to {len(recipients)} address(es): {', '.join(recipients)}")
     
-    # Setup MIME Message
     msg = MIMEMultipart()
     msg['From'] = SENDER_EMAIL
     msg['To'] = ", ".join(recipients)
     msg['Subject'] = current_session['title']
 
-    body = f"Hello,\n\nAttached is your automated trading briefing for the {SESSION_TYPE} session.\n\nIncluded:\n- Section 0: Live Financial News Wire Digest\n- Strategy-Filtered Stock, Crypto & Forex Setups\n- Granular Long/Short Entry, Target & Stop Loss Levels\n- 10-Year Backtest Analytics\n\nBest regards,\nYour Automated Trading Desk"
+    body = f"Attached is your automated trading briefing for the {SESSION_TYPE} session."
     msg.attach(MIMEText(body, 'plain'))
 
-    # Attach PDF Document
     with open(pdf_filename, "rb") as f:
         attach = MIMEApplication(f.read(), _subtype="pdf")
         attach.add_header('Content-Disposition', 'attachment', filename=pdf_filename)
         msg.attach(attach)
 
-    # Send via Gmail SMTP Server
     try:
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, recipients, msg.as_string())
         server.quit()
-        print(f"Email successfully delivered to all {len(recipients)} recipient(s)!")
+        print("✅ Email delivery successful!")
     except Exception as e:
-        print(f"Error sending email via SMTP: {e}")
+        print(f"❌ SMTP Error sending email: {e}")
 
 if __name__ == "__main__":
     if generate_pdf():
-        send_telegram_pdf()
-        send_email_pdf()
+        send_telegram()
+        send_email()
+    else:
+        print("❌ Workflow failed during PDF generation step.")
+        sys.exit(1)
