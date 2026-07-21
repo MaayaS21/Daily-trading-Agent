@@ -1,4 +1,4 @@
-name: Thrice-Daily Multi-Asset Trading Briefing (Telegram & Email)
+name: Thrice-Daily Multi-Asset Trading Briefing
 
 on:
   schedule:
@@ -13,9 +13,8 @@ on:
 
   workflow_dispatch: # Allows manual trigger anytime from GitHub UI
 
-# Explicitly declare Node 24 execution target across runner jobs
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
 
 jobs:
   build-and-send:
@@ -23,23 +22,24 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5.4.0
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Install System Dependencies for WeasyPrint
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential python3-dev python3-pip python3-setuptools python3-wheel python3-cffi libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential python3-dev python3-pip libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info
 
-      - name: Install Python Dependencies
+      - name: Install Python Packages
         run: |
+          pip install --upgrade pip
           pip install google-genai weasyprint requests
 
-      - name: Determine Session Type and Run Bot
+      - name: Determine Session Type and Run Script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
