@@ -1,28 +1,26 @@
-name: Thrice-Daily Multi-Asset Trading Briefing
+name: Thrice-Daily Multi-Asset Trading Briefing (Telegram)
 
 on:
   schedule:
-    # 1. 8:00 AM IST (2:30 AM UTC) -> Asian/Indian Premarket
+    # 1. 8:00 AM IST (2:30 AM UTC) -> Premarket
     - cron: '30 2 * * *'
-    
-    # 2. 1 Hour Before London Open (6:00 AM UTC in Summer / 11:30 AM IST)
+    # 2. 1 Hr Before London Open (6:00 AM UTC in Summer)
     - cron: '0 6 * * *'
-    
-    # 3. 1 Hour Before NY Open (12:30 PM UTC in Summer / 6:00 PM IST)
+    # 3. 1 Hr Before NY Open (12:30 PM UTC in Summer)
     - cron: '30 12 * * *'
 
-  workflow_dispatch: # Allows manual run anytime
+  workflow_dispatch: # Allows manual trigger anytime from GitHub UI
 
 jobs:
-  build-and-email:
+  build-and-send:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # Updated from v3 to v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5  # Updated from v4 to v5
         with:
           python-version: '3.10'
 
@@ -33,16 +31,14 @@ jobs:
 
       - name: Install Python Dependencies
         run: |
-          pip install google-genai weasyprint
+          pip install google-genai weasyprint requests
 
-      - name: Determine Session Type and Run
+      - name: Determine Session Type and Run Telegram Bot
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
-          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          # Detect current UTC hour to pass correct SESSION_TYPE
           HOUR=$(date -u +%H)
           if [ "$HOUR" -eq "02" ]; then
             export SESSION_TYPE="PREMARKET"
