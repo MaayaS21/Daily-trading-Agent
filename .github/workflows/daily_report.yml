@@ -1,0 +1,54 @@
+name: Thrice-Daily Multi-Asset Trading Briefing
+
+on:
+  schedule:
+    # 1. 8:00 AM IST (2:30 AM UTC) -> Asian/Indian Premarket
+    - cron: '30 2 * * *'
+    
+    # 2. 1 Hour Before London Open (6:00 AM UTC in Summer / 11:30 AM IST)
+    - cron: '0 6 * * *'
+    
+    # 3. 1 Hour Before NY Open (12:30 PM UTC in Summer / 6:00 PM IST)
+    - cron: '30 12 * * *'
+
+  workflow_dispatch: # Allows manual run anytime
+
+jobs:
+  build-and-email:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install System Dependencies for WeasyPrint
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3-dev python3-pip python3-setuptools python3-wheel python3-cffi libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info
+
+      - name: Install Python Dependencies
+        run: |
+          pip install google-genai weasyprint
+
+      - name: Determine Session Type and Run
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+        run: |
+          # Detect current UTC hour to pass correct SESSION_TYPE
+          HOUR=$(date -u +%H)
+          if [ "$HOUR" -eq "02" ]; then
+            export SESSION_TYPE="PREMARKET"
+          elif [ "$HOUR" -eq "06" ] || [ "$HOUR" -eq "07" ]; then
+            export SESSION_TYPE="LONDON"
+          else
+            export SESSION_TYPE="NEWYORK"
+          fi
+          python generate_report.py
