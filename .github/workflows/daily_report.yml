@@ -1,4 +1,4 @@
-name: Thrice-Daily Multi-Asset Trading Briefing (Telegram)
+name: Thrice-Daily Multi-Asset Trading Briefing (Telegram & Email)
 
 on:
   schedule:
@@ -19,10 +19,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6  # Upgraded to Node 24 runtime
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v6  # Upgraded to Node 24 runtime
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
@@ -35,11 +35,14 @@ jobs:
         run: |
           pip install google-genai weasyprint requests
 
-      - name: Determine Session Type and Run Telegram Bot
+      - name: Determine Session Type and Run Bot
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
         run: |
           HOUR=$(date -u +%H)
           if [ "$HOUR" -eq "02" ]; then
