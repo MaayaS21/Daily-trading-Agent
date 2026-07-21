@@ -2,11 +2,13 @@ name: Thrice-Daily Multi-Asset Trading Briefing (Telegram)
 
 on:
   schedule:
-    # 1. 8:00 AM IST (2:30 AM UTC) -> Premarket
+    # 1. 8:00 AM IST (2:30 AM UTC) -> Asian/Indian Premarket
     - cron: '30 2 * * *'
-    # 2. 1 Hr Before London Open (6:00 AM UTC in Summer)
+    
+    # 2. 1 Hour Before London Open (6:00 AM UTC in Summer / 11:30 AM IST)
     - cron: '0 6 * * *'
-    # 3. 1 Hr Before NY Open (12:30 PM UTC in Summer)
+    
+    # 3. 1 Hour Before NY Open (12:30 PM UTC in Summer / 6:00 PM IST)
     - cron: '30 12 * * *'
 
   workflow_dispatch: # Allows manual trigger anytime from GitHub UI
@@ -17,10 +19,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4  # Updated from v3 to v4
+        uses: actions/checkout@v4  # Fixed Node.js 20 deprecation warning
 
       - name: Set up Python
-        uses: actions/setup-python@v5  # Updated from v4 to v5
+        uses: actions/setup-python@v5  # Fixed Node.js 20 deprecation warning
         with:
           python-version: '3.10'
 
