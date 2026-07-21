@@ -13,16 +13,20 @@ on:
 
   workflow_dispatch: # Allows manual trigger anytime from GitHub UI
 
+# Explicitly opt into Node 24 runtime across the workflow job
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build-and-send:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2  # Pinned to patch with Node 24 execution target
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.4.0 # Pinned to patch with Node 24 execution target
         with:
           python-version: '3.10'
 
