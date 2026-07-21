@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import smtplib
+import traceback
 import requests
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -9,9 +10,9 @@ from email.mime.application import MIMEApplication
 from google import genai
 from google.genai import types
 
-print("=== STARTING REPORT GENERATION SCRIPT ===")
+print("=== STARTING MULTI-ASSET REPORT GENERATOR ===")
 
-# 1. Environment Verification
+# 1. Fetch Environment Variables
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -22,11 +23,18 @@ RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL")
 SESSION_TYPE = os.getenv("SESSION_TYPE", "PREMARKET")
 
 if not GEMINI_API_KEY:
-    print("❌ CRITICAL ERROR: GEMINI_API_KEY environment variable is missing!")
+    print("❌ FATAL ERROR: 'GEMINI_API_KEY' environment variable is not set!")
+    print("Please verify your GitHub Secrets settings.")
     sys.exit(1)
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+# Initialize Gemini Client
+try:
+    client = genai.Client(api_key=GEMINI_API_KEY)
+except Exception as e:
+    print(f"❌ FATAL ERROR: Failed to initialize Gemini Client: {e}")
+    sys.exit(1)
 
+# 2. Session Context Configuration
 SESSION_MAP = {
     "PREMARKET": {
         "title": "🌅 8:00 AM IST Premarket Report & Indian Market Setup",
@@ -94,12 +102,15 @@ Output ONLY executable Python code inside ```python ``` code blocks.
 def generate_pdf():
     print(f"📡 Requesting market search & PDF blueprint from Gemini [{SESSION_TYPE}]...")
     try:
+        # Correct SDK syntax for Google Search tool in google-genai
+        config = types.GenerateContentConfig(
+            tools=[types.Tool(google_search=types.GoogleSearch())]
+        )
+        
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=PROMPT,
-            config=types.GenerateContentConfig(
-                tools=[{"google_search": {}}]
-            )
+            config=config
         )
 
         match = re.search(r'```python\s*(.*?)\s*```', response.text, re.DOTALL)
@@ -111,10 +122,11 @@ def generate_pdf():
             return True
         else:
             print("❌ ERROR: Could not parse Python code block from Gemini output!")
-            print("Raw Gemini output snippet:", response.text[:300])
+            print("Gemini Output Snippet:", response.text[:300])
             return False
     except Exception as e:
-        print(f"❌ Gemini API Call Failed: {e}")
+        print(f"❌ Error during Gemini PDF Generation: {e}")
+        traceback.print_exc()
         return False
 
 def send_telegram():
@@ -165,12 +177,12 @@ def send_email():
     body = f"Attached is your automated trading briefing for the {SESSION_TYPE} session."
     msg.attach(MIMEText(body, 'plain'))
 
-    with open(pdf_filename, "rb") as f:
-        attach = MIMEApplication(f.read(), _subtype="pdf")
-        attach.add_header('Content-Disposition', 'attachment', filename=pdf_filename)
-        msg.attach(attach)
-
     try:
+        with open(pdf_filename, "rb") as f:
+            attach = MIMEApplication(f.read(), _subtype="pdf")
+            attach.add_header('Content-Disposition', 'attachment', filename=pdf_filename)
+            msg.attach(attach)
+
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
