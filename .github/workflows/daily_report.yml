@@ -19,6 +19,8 @@ env:
 jobs:
   build-and-send:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # allow publishing the report back into the repo (for Ploutous)
 
     steps:
       - name: Checkout repository
@@ -56,4 +58,38 @@ jobs:
           else
             export SESSION_TYPE="NEWYORK"
           fi
+          echo "SESSION_TYPE=$SESSION_TYPE" >> "$GITHUB_ENV"
           python generate_report.py
+
+      # Publish the generated PDF into the repo so Ploutous can fetch the latest
+      # brief (raw.githubusercontent.com). Additive — does not affect Telegram/email.
+      - name: Publish report to repo
+        if: success()
+        run: |
+          mkdir -p reports
+          cp -f daily_trading_blueprint.pdf "reports/${SESSION_TYPE}.pdf" || { echo "no pdf produced"; exit 0; }
+          python - <<'PY'
+          import json, os, datetime
+          idx = "reports/index.json"
+          titles = {"PREMARKET": "Indian premarket", "LONDON": "London pre-open", "NEWYORK": "New York pre-open"}
+          st = os.environ["SESSION_TYPE"]
+          data = {"sessions": {}}
+          if os.path.exists(idx):
+              try:
+                  data = json.load(open(idx))
+              except Exception:
+                  data = {"sessions": {}}
+          data.setdefault("sessions", {})[st] = {
+              "title": titles.get(st, st),
+              "updated": datetime.datetime.utcnow().isoformat() + "Z",
+              "file": f"{st}.pdf",
+          }
+          json.dump(data, open(idx, "w"), indent=2)
+          print("index.json updated for", st)
+          PY
+          git config user.name "daily-agent"
+          git config user.email "actions@users.noreply.github.com"
+          git add reports/
+          git commit -m "report: ${SESSION_TYPE} $(date -u +%F)" || { echo "nothing to commit"; exit 0; }
+          git pull --rebase --autostash origin main || true
+          git push origin HEAD:main || echo "push failed"
